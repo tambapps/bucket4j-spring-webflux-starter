@@ -43,6 +43,10 @@ public class RateLimitService {
     this.properties = properties;
   }
 
+  public Mono<Long> getRemaining(ServerHttpRequest request) {
+    return consume(request, 0);
+  }
+
   public Mono<Long> consume(ServerHttpRequest request, int nTokens) {
     for (Bucket4JConfiguration configuration : properties.getFilters()) {
       if (request.getURI().getPath().matches(configuration.getUrl())) {
@@ -50,6 +54,11 @@ public class RateLimitService {
       }
     }
     return Mono.just(NO_LIMIT);
+  }
+
+  public Mono<Long> getRemaining(Bucket4JConfiguration bucket4JConfiguration,
+      ServerHttpRequest request) {
+    return consume(bucket4JConfiguration, request, 0);
   }
 
   public Mono<Long> consume(Bucket4JConfiguration bucket4JConfiguration,
