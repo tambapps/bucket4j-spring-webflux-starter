@@ -83,8 +83,12 @@ public class RateLimitService {
     BucketConfiguration bucketConfiguration = prepareBucket4jConfigurationBuilder(rateLimit).build();
 
     AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
-    return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
-        .map(probe -> probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+    if (nTokens > 0) {
+      return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
+          .map(probe -> probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+    } else {
+      return Mono.fromFuture(asyncBucketProxy.getAvailableTokens());
+    }
   }
 
   // TODO prepare this in a configuration bean

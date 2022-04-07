@@ -20,12 +20,14 @@ public class WebfluxWebFilter implements WebFilter, Ordered {
   private final Bucket4JConfiguration bucket4JConfiguration;
   private final RateLimitService rateLimitService;
   private final Pattern urlPattern;
+  private final int filterOrder;
 
   public WebfluxWebFilter(Bucket4JConfiguration bucket4JConfiguration,
       RateLimitService rateLimitService) {
     this.bucket4JConfiguration = bucket4JConfiguration;
     this.rateLimitService = rateLimitService;
     urlPattern = Pattern.compile(bucket4JConfiguration.getUrl());
+    filterOrder = bucket4JConfiguration.getParsedFilterOrder();
   }
 
   @Override
@@ -54,6 +56,6 @@ public class WebfluxWebFilter implements WebFilter, Ordered {
 
   @Override
   public int getOrder() {
-    return bucket4JConfiguration.getFilterOrder();
+    return filterOrder;
   }
 }

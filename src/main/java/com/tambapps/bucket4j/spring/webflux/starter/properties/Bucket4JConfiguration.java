@@ -28,9 +28,9 @@ public class Bucket4JConfiguration {
 	private String url = ".*";
 	
 	/**
-	 * The filter order has a default of the highest precedence reduced by 10
+	 * The filter order. It can be a SecurityWebFiltersOrder, or a number. It has a default of the highest precedence reduced by 10
 	 */
-	private int filterOrder = Ordered.HIGHEST_PRECEDENCE + 10;
+	private String filterOrder = String.valueOf(Ordered.HIGHEST_PRECEDENCE + 10);
 
 	private List<RateLimit> rateLimits = new ArrayList<>();
 	
@@ -51,4 +51,16 @@ public class Bucket4JConfiguration {
 	
 	private Map<String, String> httpResponseHeaders = new HashMap<>();
 
+	public int getParsedFilterOrder() {
+		try {
+			return Integer.parseInt(filterOrder);
+		} catch (NumberFormatException e) {
+			// it may be a SecurityWebFiltersOrder
+			try {
+				return org.springframework.security.config.web.server.SecurityWebFiltersOrder.valueOf(filterOrder.toUpperCase()).getOrder();
+			} catch (IllegalArgumentException ignored) {
+				throw e;
+			}
+		}
+	}
 }
