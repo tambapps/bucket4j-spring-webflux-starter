@@ -6,7 +6,9 @@ import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimitMatchingStrategy;
 import com.tambapps.bucket4j.spring.webflux.starter.util.ExpressionConfigurer;
 import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.distributed.AsyncBucketProxy;
+import io.github.bucket4j.distributed.BucketProxy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
@@ -95,13 +97,22 @@ public class RateLimitService {
   }
 
   private Mono<Long> doConsume(String key, BucketConfiguration bucketConfiguration, int nTokens) {
-    // TODO handle synchronous only buckets
-    AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
-    if (nTokens > 0) {
-      return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
-          .map(probe -> probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+    if (buckets.isAsyncModeSupported()) {
+      AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
+      if (nTokens > 0) {
+        return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
+            .map(probe -> probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+      } else {
+        return Mono.fromFuture(asyncBucketProxy.getAvailableTokens());
+      }
     } else {
-      return Mono.fromFuture(asyncBucketProxy.getAvailableTokens());
+      BucketProxy bucketProxy = buckets.builder().build(key, bucketConfiguration);
+      ConsumptionProbe probe = bucketProxy.tryConsumeAndReturnRemaining(nTokens);
+      if (nTokens > 0) {
+        return Mono.just(probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+      } else {
+        return Mono.just(probe.getRemainingTokens());
+      }
     }
   }
 
