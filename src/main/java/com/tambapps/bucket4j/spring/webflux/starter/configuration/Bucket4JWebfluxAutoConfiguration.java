@@ -19,7 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Configuration
 @ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
 @AutoConfigureAfter(value = { CacheAutoConfiguration.class })
-@EnableConfigurationProperties({ Bucket4JWebfluxProperties.class})
 public class Bucket4JWebfluxAutoConfiguration {
 
   private final Bucket4JWebfluxProperties properties;

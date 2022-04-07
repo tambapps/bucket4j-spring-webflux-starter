@@ -24,8 +24,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Service
-@ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
 public class RateLimitService {
 
   public static final Long NO_LIMIT = Long.MIN_VALUE;
