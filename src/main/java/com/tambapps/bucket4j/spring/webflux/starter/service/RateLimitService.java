@@ -4,6 +4,7 @@ import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JConfigura
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JWebfluxProperties;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimitMatchingStrategy;
+import com.tambapps.bucket4j.spring.webflux.starter.util.CacheResolver;
 import com.tambapps.bucket4j.spring.webflux.starter.util.ExpressionConfigurer;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;
@@ -27,19 +28,19 @@ public class RateLimitService {
   public static final Long NO_LIMIT = Long.MIN_VALUE;
 
   private final ExpressionParser webfluxFilterExpressionParser;
-  private final ProxyManager<String> buckets;
+  private final CacheResolver cacheResolver;
   private final Bucket4JWebfluxProperties properties;
   private final Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap;
   private final Optional<ExpressionConfigurer> optExpressionConfigurer;
 
   public RateLimitService(
       ExpressionParser webfluxFilterExpressionParser,
-      ProxyManager<String> buckets,
+      CacheResolver cacheResolver,
       Bucket4JWebfluxProperties properties,
       Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
       Optional<ExpressionConfigurer> optExpressionConfigurer) {
     this.webfluxFilterExpressionParser = webfluxFilterExpressionParser;
-    this.buckets = buckets;
+    this.cacheResolver = cacheResolver;
     this.properties = properties;
     this.rateLimitBucketConfigurationMap = rateLimitBucketConfigurationMap;
     this.optExpressionConfigurer = optExpressionConfigurer;
@@ -92,11 +93,15 @@ public class RateLimitService {
     Mono<String> keyMono = getKey(bucket4JConfiguration.getUrl(), rateLimit, request);
     BucketConfiguration bucketConfiguration = rateLimitBucketConfigurationMap.get(rateLimit);
 
-
-    return keyMono.flatMap(key -> doConsume(key, bucketConfiguration, nTokens));
+    return Mono.zip(keyMono, cacheResolver.resolve(bucket4JConfiguration.getCacheName()))
+        .flatMap(bi -> {
+          String key = bi.getT1();
+          ProxyManager<String> buckets = bi.getT2();
+          return doConsume(buckets, key, bucketConfiguration, nTokens);
+        });
   }
 
-  private Mono<Long> doConsume(String key, BucketConfiguration bucketConfiguration, int nTokens) {
+  private Mono<Long> doConsume(ProxyManager<String> buckets, String key, BucketConfiguration bucketConfiguration, int nTokens) {
     if (buckets.isAsyncModeSupported()) {
       AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
       if (nTokens > 0) {
