@@ -4,6 +4,7 @@ import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JConfigura
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JWebfluxProperties;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimitMatchingStrategy;
+import com.tambapps.bucket4j.spring.webflux.starter.util.ExpressionConfigurer;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.distributed.AsyncBucketProxy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
@@ -16,6 +17,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class RateLimitService {
@@ -26,16 +28,19 @@ public class RateLimitService {
   private final ProxyManager<String> buckets;
   private final Bucket4JWebfluxProperties properties;
   private final Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap;
+  private final Optional<ExpressionConfigurer> optExpressionConfigurer;
 
   public RateLimitService(
       ExpressionParser webfluxFilterExpressionParser,
       ProxyManager<String> buckets,
       Bucket4JWebfluxProperties properties,
-      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap) {
+      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
+      Optional<ExpressionConfigurer> optExpressionConfigurer) {
     this.webfluxFilterExpressionParser = webfluxFilterExpressionParser;
     this.buckets = buckets;
     this.properties = properties;
     this.rateLimitBucketConfigurationMap = rateLimitBucketConfigurationMap;
+    this.optExpressionConfigurer = optExpressionConfigurer;
   }
 
   public Mono<Long> getRemaining(ServerHttpRequest request) {
@@ -82,9 +87,15 @@ public class RateLimitService {
   }
   private Mono<Long> consume(Bucket4JConfiguration bucket4JConfiguration, RateLimit rateLimit,
       ServerHttpRequest request, int nTokens) {
-    String key = getKey(bucket4JConfiguration, rateLimit, request);
+    Mono<String> keyMono = getKey(bucket4JConfiguration.getUrl(), rateLimit, request);
     BucketConfiguration bucketConfiguration = rateLimitBucketConfigurationMap.get(rateLimit);
 
+
+    return keyMono.flatMap(key -> doConsume(key, bucketConfiguration, nTokens));
+  }
+
+  private Mono<Long> doConsume(String key, BucketConfiguration bucketConfiguration, int nTokens) {
+    // TODO handle synchronous only buckets
     AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
     if (nTokens > 0) {
       return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
@@ -94,11 +105,16 @@ public class RateLimitService {
     }
   }
 
-  private String getKey(Bucket4JConfiguration bucket4JConfiguration, RateLimit rateLimit, ServerHttpRequest request) {
+  private Mono<String> getKey(String url, RateLimit rateLimit, ServerHttpRequest request) {
     Expression expr = webfluxFilterExpressionParser.parseExpression(rateLimit.getExpression());
     StandardEvaluationContext context = new StandardEvaluationContext();
-    // TODO allow to configure root object
-    final String value = expr.getValue(context, request, String.class);
-    return bucket4JConfiguration.getUrl() + "-" + value;
+    Mono<Object> rootObjectMono = optExpressionConfigurer.map(expressionConfigurer -> expressionConfigurer.configure(context, request))
+        .orElse(Mono.just(request));
+    return rootObjectMono.map(rootObject -> evaluateKey(expr, context, url, rootObject));
+  }
+
+  private String evaluateKey(Expression expr, StandardEvaluationContext context, String url, Object rootObject) {
+    final String value = expr.getValue(context, rootObject, String.class);
+    return url + "-" + value;
   }
 }

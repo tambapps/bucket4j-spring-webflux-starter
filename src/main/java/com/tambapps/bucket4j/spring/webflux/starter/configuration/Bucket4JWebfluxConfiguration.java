@@ -4,6 +4,7 @@ import com.tambapps.bucket4j.spring.webflux.starter.properties.BandWidth;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JWebfluxProperties;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
 import com.tambapps.bucket4j.spring.webflux.starter.service.RateLimitService;
+import com.tambapps.bucket4j.spring.webflux.starter.util.ExpressionConfigurer;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConfigurationBuilder;
@@ -21,6 +22,7 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -41,8 +43,10 @@ public class Bucket4JWebfluxConfiguration {
       ExpressionParser webfluxFilterExpressionParser,
       ProxyManager<String> buckets,
       Bucket4JWebfluxProperties properties,
-      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap) {
-    return new RateLimitService(webfluxFilterExpressionParser, buckets, properties, rateLimitBucketConfigurationMap);
+      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
+      Optional<ExpressionConfigurer> optExpressionConfigurer) {
+    return new RateLimitService(webfluxFilterExpressionParser, buckets, properties, rateLimitBucketConfigurationMap,
+        optExpressionConfigurer);
   }
 
   @Bean
