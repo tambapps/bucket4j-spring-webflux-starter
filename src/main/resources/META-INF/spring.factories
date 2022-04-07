@@ -1,6 +1,6 @@
 # AutoConfigurations
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-com.tambapps.bucket4j.spring.webflux.starter.configuration.Bucket4JWebfluxConfiguration,\
+com.tambapps.bucket4j.spring.webflux.starter.configuration.cache.Bucket4jCacheConfiguration,\
 com.tambapps.bucket4j.spring.webflux.starter.configuration.Bucket4JWebfluxAutoConfiguration
 
 
