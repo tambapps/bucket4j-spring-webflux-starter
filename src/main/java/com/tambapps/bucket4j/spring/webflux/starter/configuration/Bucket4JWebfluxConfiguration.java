@@ -1,7 +1,13 @@
 package com.tambapps.bucket4j.spring.webflux.starter.configuration;
 
+import com.tambapps.bucket4j.spring.webflux.starter.properties.BandWidth;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JWebfluxProperties;
+import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
 import com.tambapps.bucket4j.spring.webflux.starter.service.RateLimitService;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConfigurationBuilder;
+import io.github.bucket4j.Refill;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -11,7 +17,12 @@ import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.SpelCompilerMode;
 import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Configuration
 @ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
@@ -29,8 +40,28 @@ public class Bucket4JWebfluxConfiguration {
   public RateLimitService rateLimitService(
       ExpressionParser webfluxFilterExpressionParser,
       ProxyManager<String> buckets,
-      Bucket4JWebfluxProperties properties) {
-    return new RateLimitService(webfluxFilterExpressionParser, buckets, properties);
+      Bucket4JWebfluxProperties properties,
+      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap) {
+    return new RateLimitService(webfluxFilterExpressionParser, buckets, properties, rateLimitBucketConfigurationMap);
+  }
+
+  @Bean
+  public Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap(Bucket4JWebfluxProperties properties) {
+    Map<RateLimit, BucketConfiguration> map = properties.getFilters().stream().flatMap(f -> f.getRateLimits().stream())
+        .collect(Collectors.toMap(Function.identity(), this::prepareBucket4jConfiguration));
+      return Collections.unmodifiableMap(map);
+  }
+
+  private BucketConfiguration prepareBucket4jConfiguration(RateLimit rl) {
+    ConfigurationBuilder configBuilder = BucketConfiguration.builder();
+    for (BandWidth bandWidth : rl.getBandwidths()) {
+      Bandwidth bucket4jBandWidth = Bandwidth.simple(bandWidth.getCapacity(), Duration.of(bandWidth.getTime(), bandWidth.getUnit()));
+      if(bandWidth.getFixedRefillInterval() > 0) {
+        bucket4jBandWidth = Bandwidth.classic(bandWidth.getCapacity(), Refill.intervally(bandWidth.getCapacity(), Duration.of(bandWidth.getFixedRefillInterval(), bandWidth.getFixedRefillIntervalUnit())));
+      }
+      configBuilder = configBuilder.addLimit(bucket4jBandWidth);
+    };
+    return configBuilder.build();
   }
 
 }
