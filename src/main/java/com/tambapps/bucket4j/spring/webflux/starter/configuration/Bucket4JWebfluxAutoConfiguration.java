@@ -29,12 +29,10 @@ import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.web.server.WebFilter;
 
-import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,26 +42,17 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
 @AutoConfigureAfter(value = { CacheAutoConfiguration.class, Bucket4jCacheConfiguration.class })
 @ConditionalOnBean(value = CacheResolver.class)
-@Import(value = {Bucket4JWebfluxConfiguration.class})
+@Import(value = {Bucket4JWebfluxConfiguration.class, ExpressionConverter.class})
 @EnableConfigurationProperties({ Bucket4JWebfluxProperties.class})
 public class Bucket4JWebfluxAutoConfiguration {
 
-
-  @Bean
-  public ExpressionParser webfluxFilterExpressionParser() {
-    SpelParserConfiguration config = new SpelParserConfiguration(SpelCompilerMode.IMMEDIATE,
-        this.getClass().getClassLoader());
-    return new SpelExpressionParser(config);
-  }
-
   @Bean
   public RateLimitService rateLimitService(
-      ExpressionParser webfluxFilterExpressionParser,
       CacheResolver cacheResolver,
       Bucket4JWebfluxProperties properties,
       Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
       Optional<ExpressionConfigurer> optExpressionConfigurer) {
-    return new RateLimitService(webfluxFilterExpressionParser, cacheResolver, properties,
+    return new RateLimitService(cacheResolver, properties,
         rateLimitBucketConfigurationMap,
         optExpressionConfigurer);
   }

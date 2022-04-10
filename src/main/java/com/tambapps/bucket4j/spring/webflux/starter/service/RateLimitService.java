@@ -13,7 +13,6 @@ import io.github.bucket4j.distributed.AsyncBucketProxy;
 import io.github.bucket4j.distributed.BucketProxy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.expression.Expression;
-import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import reactor.core.publisher.Flux;
@@ -29,19 +28,16 @@ public class RateLimitService {
 
   public static final Long NO_LIMIT = Long.MIN_VALUE;
 
-  private final ExpressionParser webfluxFilterExpressionParser;
   private final CacheResolver cacheResolver;
   private final Bucket4JWebfluxProperties properties;
   private final Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap;
   private final Optional<ExpressionConfigurer> optExpressionConfigurer;
 
   public RateLimitService(
-      ExpressionParser webfluxFilterExpressionParser,
       CacheResolver cacheResolver,
       Bucket4JWebfluxProperties properties,
       Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
       Optional<ExpressionConfigurer> optExpressionConfigurer) {
-    this.webfluxFilterExpressionParser = webfluxFilterExpressionParser;
     this.cacheResolver = cacheResolver;
     this.properties = properties;
     this.rateLimitBucketConfigurationMap = rateLimitBucketConfigurationMap;
@@ -141,26 +137,22 @@ public class RateLimitService {
     }
   }
 
-  private Mono<Boolean> executeCondition(String executeCondition, ServerHttpRequest request) {
-    // TODO stop recompiling expression everytime we make a request
-    Expression expr = webfluxFilterExpressionParser.parseExpression(executeCondition);
+  private Mono<Boolean> executeCondition(Expression executeCondition, ServerHttpRequest request) {
     StandardEvaluationContext context = new StandardEvaluationContext();
     Mono<Object> rootObjectMono = optExpressionConfigurer.map(expressionConfigurer -> expressionConfigurer.configure(context, request))
         .orElse(Mono.just(request));
-    return rootObjectMono.map(rootObject -> expr.getValue(context, rootObject, Boolean.class));
+    return rootObjectMono.map(rootObject -> executeCondition.getValue(context, rootObject, Boolean.class));
   }
 
   private Mono<String> getKey(String url, RateLimit rateLimit, ServerHttpRequest request) {
-    // TODO stop recompiling expression everytime we make a request
-    Expression expr = webfluxFilterExpressionParser.parseExpression(rateLimit.getExpression());
     StandardEvaluationContext context = new StandardEvaluationContext();
     Mono<Object> rootObjectMono = optExpressionConfigurer.map(expressionConfigurer -> expressionConfigurer.configure(context, request))
         .orElse(Mono.just(request));
-    return rootObjectMono.map(rootObject -> evaluateKey(expr, context, url, rootObject));
+    return rootObjectMono.map(rootObject -> evaluateKey(rateLimit.getExpression(), context, url, rootObject));
   }
 
   private String evaluateKey(Expression expr, StandardEvaluationContext context, String url, Object rootObject) {
-    final String value = expr.getValue(context, rootObject, String.class);
+    final String value = expr != null ? expr.getValue(context, rootObject, String.class) : "1";
     return url + "-" + value;
   }
 
