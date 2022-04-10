@@ -125,6 +125,7 @@ public class RateLimitService {
   }
 
   private Mono<String> getKey(String url, RateLimit rateLimit, ServerHttpRequest request) {
+    // TODO stop recompiling expression everytime we make a request
     Expression expr = webfluxFilterExpressionParser.parseExpression(rateLimit.getExpression());
     StandardEvaluationContext context = new StandardEvaluationContext();
     Mono<Object> rootObjectMono = optExpressionConfigurer.map(expressionConfigurer -> expressionConfigurer.configure(context, request))
