@@ -26,47 +26,10 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@Configuration
-@ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
-@EnableConfigurationProperties({ Bucket4JWebfluxProperties.class})
+//@Configuration
+//@ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
+
 public class Bucket4JWebfluxConfiguration {
 
-  @Bean
-  public ExpressionParser webfluxFilterExpressionParser() {
-    SpelParserConfiguration config = new SpelParserConfiguration(SpelCompilerMode.IMMEDIATE,
-        this.getClass().getClassLoader());
-    return new SpelExpressionParser(config);
-  }
-
-  @Bean
-  public RateLimitService rateLimitService(
-      ExpressionParser webfluxFilterExpressionParser,
-      CacheResolver cacheResolver,
-      Bucket4JWebfluxProperties properties,
-      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
-      Optional<ExpressionConfigurer> optExpressionConfigurer) {
-    return new RateLimitService(webfluxFilterExpressionParser, cacheResolver, properties,
-        rateLimitBucketConfigurationMap,
-        optExpressionConfigurer);
-  }
-
-  @Bean
-  public Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap(Bucket4JWebfluxProperties properties) {
-    Map<RateLimit, BucketConfiguration> map = properties.getFilters().stream().flatMap(f -> f.getRateLimits().stream())
-        .collect(Collectors.toMap(Function.identity(), this::prepareBucket4jConfiguration));
-      return Collections.unmodifiableMap(map);
-  }
-
-  private BucketConfiguration prepareBucket4jConfiguration(RateLimit rl) {
-    ConfigurationBuilder configBuilder = BucketConfiguration.builder();
-    for (BandWidth bandWidth : rl.getBandwidths()) {
-      Bandwidth bucket4jBandWidth = Bandwidth.simple(bandWidth.getCapacity(), Duration.of(bandWidth.getTime(), bandWidth.getUnit()));
-      if(bandWidth.getFixedRefillInterval() > 0) {
-        bucket4jBandWidth = Bandwidth.classic(bandWidth.getCapacity(), Refill.intervally(bandWidth.getCapacity(), Duration.of(bandWidth.getFixedRefillInterval(), bandWidth.getFixedRefillIntervalUnit())));
-      }
-      configBuilder = configBuilder.addLimit(bucket4jBandWidth);
-    };
-    return configBuilder.build();
-  }
 
 }

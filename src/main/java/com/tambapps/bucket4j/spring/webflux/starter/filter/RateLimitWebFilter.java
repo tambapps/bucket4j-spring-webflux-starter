@@ -5,7 +5,6 @@ import static com.tambapps.bucket4j.spring.webflux.starter.service.RateLimitServ
 import com.tambapps.bucket4j.spring.webflux.starter.exception.RateLimitException;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JConfiguration;
 import com.tambapps.bucket4j.spring.webflux.starter.service.RateLimitService;
-import org.springframework.core.Ordered;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.server.ServerWebExchange;
@@ -15,19 +14,17 @@ import reactor.core.publisher.Mono;
 
 import java.util.regex.Pattern;
 
-public class WebfluxWebFilter implements WebFilter, Ordered {
+public class RateLimitWebFilter implements WebFilter {
 
   private final Bucket4JConfiguration bucket4JConfiguration;
   private final RateLimitService rateLimitService;
   private final Pattern urlPattern;
-  private final int filterOrder;
 
-  public WebfluxWebFilter(Bucket4JConfiguration bucket4JConfiguration,
+  public RateLimitWebFilter(Bucket4JConfiguration bucket4JConfiguration,
       RateLimitService rateLimitService) {
     this.bucket4JConfiguration = bucket4JConfiguration;
     this.rateLimitService = rateLimitService;
     urlPattern = Pattern.compile(bucket4JConfiguration.getUrl());
-    filterOrder = bucket4JConfiguration.getParsedFilterOrder();
   }
 
   @Override
@@ -54,8 +51,4 @@ public class WebfluxWebFilter implements WebFilter, Ordered {
     });
   }
 
-  @Override
-  public int getOrder() {
-    return filterOrder;
-  }
 }
