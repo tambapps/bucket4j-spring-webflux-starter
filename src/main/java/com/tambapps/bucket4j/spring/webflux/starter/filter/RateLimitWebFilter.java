@@ -16,6 +16,9 @@ import java.util.regex.Pattern;
 
 public class RateLimitWebFilter implements WebFilter {
 
+  public static final String RATE_LIMIT_REMAINING_HEADER = "X-Rate-Limit-Remaining";
+  public static final String RATE_LIMIT_RETRY_AFTER_HEADER = "X-Rate-Limit-Retry-After-Seconds";
+
   private final Bucket4JConfiguration bucket4JConfiguration;
   private final RateLimitService rateLimitService;
   private final Pattern urlPattern;
@@ -37,16 +40,22 @@ public class RateLimitWebFilter implements WebFilter {
       return chain.filter(exchange);
     }
 
-    return rateLimitService.consume(bucket4JConfiguration, request, 1).flatMap(remaining -> {
-      if (NO_LIMIT.equals(remaining)) {
-        return chain.filter(exchange);
-      } else if (remaining <= 0) {
-        return Mono.error(new RateLimitException());
-      } else {
-        if(!bucket4JConfiguration.getHideHttpResponseHeaders()) {
-          response.getHeaders().set("X-Rate-Limit-Remaining", "" + remaining);
-        }
-        return chain.filter(exchange);
+    return rateLimitService.consume(bucket4JConfiguration, request, 1).flatMap(result -> {
+      switch (result.getType()) {
+        case CONSUMED:
+          if(!bucket4JConfiguration.getHideHttpResponseHeaders()) {
+            response.getHeaders().set(RATE_LIMIT_REMAINING_HEADER, "" + result.getRemainingTokens());
+          }
+        case NOT_CONSUMED:
+        default:
+          return chain.filter(exchange);
+        case RATE_LIMITED:
+
+          if(!bucket4JConfiguration.getHideHttpResponseHeaders()) {
+            response.getHeaders().set(RATE_LIMIT_RETRY_AFTER_HEADER, "" + result.getRetryAfterSeconds());
+          }
+          return Mono.error(new RateLimitException(result.getRetryAfterSeconds()));
+
       }
     });
   }

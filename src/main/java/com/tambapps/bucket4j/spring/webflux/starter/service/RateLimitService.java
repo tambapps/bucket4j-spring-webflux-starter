@@ -1,5 +1,6 @@
 package com.tambapps.bucket4j.spring.webflux.starter.service;
 
+import com.tambapps.bucket4j.spring.webflux.starter.model.ConsumptionResult;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JConfiguration;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.Bucket4JWebfluxProperties;
 import com.tambapps.bucket4j.spring.webflux.starter.properties.RateLimit;
@@ -21,6 +22,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class RateLimitService {
@@ -47,48 +49,48 @@ public class RateLimitService {
   }
 
   public Mono<Long> getRemaining(ServerHttpRequest request) {
-    return consume(request, 0);
+    return consume(request, 0).map(ConsumptionResult::getRemainingTokens);
   }
 
-  public Mono<Long> consume(ServerHttpRequest request, int nTokens) {
+  public Mono<ConsumptionResult> consume(ServerHttpRequest request, int nTokens) {
     for (Bucket4JConfiguration configuration : properties.getFilters()) {
       if (request.getURI().getPath().matches(configuration.getUrl())) {
         return consume(configuration, request, nTokens);
       }
     }
-    return Mono.just(NO_LIMIT);
+    return Mono.just(ConsumptionResult.notConsumed());
   }
 
   public Mono<Long> getRemaining(Bucket4JConfiguration bucket4JConfiguration,
       ServerHttpRequest request) {
-    return consume(bucket4JConfiguration, request, 0);
+    return consume(bucket4JConfiguration, request, 0).map(ConsumptionResult::getRemainingTokens);
   }
 
-  public Mono<Long> consume(Bucket4JConfiguration bucket4JConfiguration,
+  public Mono<ConsumptionResult> consume(Bucket4JConfiguration bucket4JConfiguration,
       ServerHttpRequest request, int nTokens) {
-    List<Mono<Long>> monos = bucket4JConfiguration.getRateLimits()
+    List<Mono<ConsumptionResult>> monos = bucket4JConfiguration.getRateLimits()
         .stream()
         .map(rateLimit -> consume(bucket4JConfiguration, rateLimit, request, nTokens))
         .collect(Collectors.toList());
 
     return Flux.concat(monos)
-        .reduce((remaining1, remaining2) -> {
-          if (NO_LIMIT.equals(remaining1)) {
-            return remaining2;
+        .reduce((result1, result2) -> {
+          if (result1.getType() == ConsumptionResult.Type.NOT_CONSUMED) {
+            return result2;
           }
-          if (NO_LIMIT.equals(remaining2)) {
-            return remaining1;
+          if (result2.getType() == ConsumptionResult.Type.NOT_CONSUMED) {
+            return result1;
           }
           // if we've reached this point, we know both remaining1 and remaining2 have limit
           if (RateLimitMatchingStrategy.FIRST.equals(bucket4JConfiguration.getStrategy())) {
-            return remaining1;
+            return result1;
           }
-          return remaining1 < remaining2 ? remaining1 : remaining2;
+          return result1.getRemainingTokens() < result2.getRemainingTokens() ? result1 : result2;
         })
-        .switchIfEmpty(Mono.just(NO_LIMIT));
+        .switchIfEmpty(Mono.just(ConsumptionResult.notConsumed()));
 
   }
-  private Mono<Long> consume(Bucket4JConfiguration bucket4JConfiguration, RateLimit rateLimit,
+  private Mono<ConsumptionResult> consume(Bucket4JConfiguration bucket4JConfiguration, RateLimit rateLimit,
       ServerHttpRequest request, int nTokens) {
     Mono<String> keyMono = getKey(bucket4JConfiguration.getUrl(), rateLimit, request);
     BucketConfiguration bucketConfiguration = rateLimitBucketConfigurationMap.get(rateLimit);
@@ -101,22 +103,23 @@ public class RateLimitService {
         });
   }
 
-  private Mono<Long> doConsume(ProxyManager<String> buckets, String key, BucketConfiguration bucketConfiguration, int nTokens) {
+  private Mono<ConsumptionResult> doConsume(ProxyManager<String> buckets, String key, BucketConfiguration bucketConfiguration, int nTokens) {
     if (buckets.isAsyncModeSupported()) {
       AsyncBucketProxy asyncBucketProxy = buckets.asAsync().builder().build(key, bucketConfiguration);
       if (nTokens > 0) {
         return Mono.fromFuture(asyncBucketProxy.tryConsumeAndReturnRemaining(nTokens))
-            .map(probe -> probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+            .map(probe -> probe.isConsumed() ? ConsumptionResult.consumed(probe.getRemainingTokens()) : ConsumptionResult.rateLimited(TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill())));
       } else {
-        return Mono.fromFuture(asyncBucketProxy.getAvailableTokens());
+        return Mono.fromFuture(asyncBucketProxy.getAvailableTokens())
+            .map(ConsumptionResult::notConsumed);
       }
     } else {
       BucketProxy bucketProxy = buckets.builder().build(key, bucketConfiguration);
       ConsumptionProbe probe = bucketProxy.tryConsumeAndReturnRemaining(nTokens);
       if (nTokens > 0) {
-        return Mono.just(probe.isConsumed() ? probe.getRemainingTokens() : NO_LIMIT);
+        return Mono.just(probe.isConsumed() ? ConsumptionResult.consumed(probe.getRemainingTokens()) : ConsumptionResult.rateLimited(TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill())));
       } else {
-        return Mono.just(probe.getRemainingTokens());
+        return Mono.just(ConsumptionResult.notConsumed(probe.getRemainingTokens()));
       }
     }
   }
