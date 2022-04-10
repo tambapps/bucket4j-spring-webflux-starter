@@ -92,15 +92,32 @@ public class RateLimitService {
   }
   private Mono<ConsumptionResult> consume(Bucket4JConfiguration bucket4JConfiguration, RateLimit rateLimit,
       ServerHttpRequest request, int nTokens) {
-    Mono<String> keyMono = getKey(bucket4JConfiguration.getUrl(), rateLimit, request);
-    BucketConfiguration bucketConfiguration = rateLimitBucketConfigurationMap.get(rateLimit);
+    Mono<Boolean> executeMono;
 
-    return Mono.zip(keyMono, cacheResolver.resolve(bucket4JConfiguration.getCacheName()))
-        .flatMap(bi -> {
-          String key = bi.getT1();
-          ProxyManager<String> buckets = bi.getT2();
-          return doConsume(buckets, key, bucketConfiguration, nTokens);
-        });
+    if (rateLimit.getSkipCondition() != null && rateLimit.getExecuteCondition() != null) {
+      executeMono = Mono.zip(executeCondition(rateLimit.getSkipCondition(), request),
+          executeCondition(rateLimit.getExecuteCondition(), request))
+          .map(bi ->
+              // need to negate the skip
+              !bi.getT1() && bi.getT2());
+    } else if (rateLimit.getSkipCondition() != null) {
+      executeMono = executeCondition(rateLimit.getSkipCondition(), request).map(skip -> !skip);
+    } else if (rateLimit.getExecuteCondition() != null) {
+      executeMono = executeCondition(rateLimit.getExecuteCondition(), request);
+    } else {
+      executeMono = Mono.just(true);
+    }
+
+    Mono<String> keyMono = getKey(bucket4JConfiguration.getUrl(), rateLimit, request);
+
+    return executeMono.flatMap(execute -> execute ?
+        Mono.zip(keyMono, cacheResolver.resolve(bucket4JConfiguration.getCacheName()))
+            .flatMap(bi -> {
+              String key = bi.getT1();
+              ProxyManager<String> buckets = bi.getT2();
+              return doConsume(buckets, key, rateLimitBucketConfigurationMap.get(rateLimit), nTokens);
+            })
+        : Mono.just(ConsumptionResult.notConsumed()));
   }
 
   private Mono<ConsumptionResult> doConsume(ProxyManager<String> buckets, String key, BucketConfiguration bucketConfiguration, int nTokens) {
@@ -124,6 +141,15 @@ public class RateLimitService {
     }
   }
 
+  private Mono<Boolean> executeCondition(String executeCondition, ServerHttpRequest request) {
+    // TODO stop recompiling expression everytime we make a request
+    Expression expr = webfluxFilterExpressionParser.parseExpression(executeCondition);
+    StandardEvaluationContext context = new StandardEvaluationContext();
+    Mono<Object> rootObjectMono = optExpressionConfigurer.map(expressionConfigurer -> expressionConfigurer.configure(context, request))
+        .orElse(Mono.just(request));
+    return rootObjectMono.map(rootObject -> expr.getValue(context, rootObject, Boolean.class));
+  }
+
   private Mono<String> getKey(String url, RateLimit rateLimit, ServerHttpRequest request) {
     // TODO stop recompiling expression everytime we make a request
     Expression expr = webfluxFilterExpressionParser.parseExpression(rateLimit.getExpression());
@@ -137,4 +163,5 @@ public class RateLimitService {
     final String value = expr.getValue(context, rootObject, String.class);
     return url + "-" + value;
   }
+
 }
