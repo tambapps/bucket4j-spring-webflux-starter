@@ -128,11 +128,11 @@ public class RateLimitService {
       }
     } else {
       BucketProxy bucketProxy = buckets.builder().build(key, bucketConfiguration);
-      ConsumptionProbe probe = bucketProxy.tryConsumeAndReturnRemaining(nTokens);
       if (nTokens > 0) {
+        ConsumptionProbe probe = bucketProxy.tryConsumeAndReturnRemaining(nTokens);
         return Mono.just(probe.isConsumed() ? ConsumptionResult.consumed(probe.getRemainingTokens()) : ConsumptionResult.rateLimited(TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill())));
       } else {
-        return Mono.just(ConsumptionResult.notConsumed(probe.getRemainingTokens()));
+        return Mono.just(ConsumptionResult.notConsumed(bucketProxy.getAvailableTokens()));
       }
     }
   }

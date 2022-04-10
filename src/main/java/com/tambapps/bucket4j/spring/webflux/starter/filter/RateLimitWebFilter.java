@@ -50,7 +50,6 @@ public class RateLimitWebFilter implements WebFilter {
         default:
           return chain.filter(exchange);
         case RATE_LIMITED:
-
           if(!bucket4JConfiguration.getHideHttpResponseHeaders()) {
             response.getHeaders().set(RATE_LIMIT_RETRY_AFTER_HEADER, "" + result.getRetryAfterSeconds());
           }
