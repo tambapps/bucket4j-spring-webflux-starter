@@ -15,6 +15,7 @@ import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.expression.Expression;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -24,6 +25,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+@Service
 public class RateLimitService {
 
   public static final Long NO_LIMIT = Long.MIN_VALUE;

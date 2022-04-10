@@ -42,20 +42,9 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = Bucket4JWebfluxProperties.PROPERTY_PREFIX, value = { "enabled" }, matchIfMissing = true)
 @AutoConfigureAfter(value = { CacheAutoConfiguration.class, Bucket4jCacheConfiguration.class })
 @ConditionalOnBean(value = CacheResolver.class)
-@Import(value = {Bucket4JWebfluxConfiguration.class, ExpressionConverter.class})
+@Import(value = {Bucket4JWebfluxConfiguration.class, ExpressionConverter.class, RateLimitService.class})
 @EnableConfigurationProperties({ Bucket4JWebfluxProperties.class})
 public class Bucket4JWebfluxAutoConfiguration {
-
-  @Bean
-  public RateLimitService rateLimitService(
-      CacheResolver cacheResolver,
-      Bucket4JWebfluxProperties properties,
-      Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap,
-      Optional<ExpressionConfigurer> optExpressionConfigurer) {
-    return new RateLimitService(cacheResolver, properties,
-        rateLimitBucketConfigurationMap,
-        optExpressionConfigurer);
-  }
 
   @Bean
   public Map<RateLimit, BucketConfiguration> rateLimitBucketConfigurationMap(Bucket4JWebfluxProperties properties) {
